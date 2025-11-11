@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] {
+    display: none !important;
+}
+
+@layer components {
+    .btn {
+        @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest transition ease-in-out duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-25;
+    }
+
+    .btn-sm {
+        @apply px-3 py-1 text-xs;
+    }
+
+    .btn-primary {
+        @apply bg-primary-600 hover:bg-primary-700 focus:ring-primary-500;
+    }
+
+    .btn-secondary {
+        @apply bg-gray-600 hover:bg-gray-700 focus:ring-gray-500;
+    }
+
+    .btn-success {
+        @apply bg-success-600 hover:bg-success-700 focus:ring-success-500;
+    }
+
+    .btn-warning {
+        @apply bg-warning-600 hover:bg-warning-700 focus:ring-warning-500;
+    }
+
+    .btn-danger {
+        @apply bg-danger-600 hover:bg-danger-700 focus:ring-danger-500;
+    }
+
+    .btn-orange {
+        @apply bg-orange-600 hover:bg-orange-700 focus:ring-orange-500;
+    }
+
+    .badge {
+        @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    }
+
+    .badge-success {
+        @apply bg-success-100 text-success-800;
+    }
+
+    .badge-warning {
+        @apply bg-warning-100 text-warning-800;
+    }
+
+    .badge-danger {
+        @apply bg-danger-100 text-danger-800;
+    }
+
+    .badge-info {
+        @apply bg-blue-100 text-blue-800;
+    }
+
+    .card {
+        @apply bg-white overflow-hidden shadow rounded-lg;
+    }
+
+    .form-input {
+        @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+    }
+
+    .form-select {
+        @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+    }
+
+    .form-textarea {
+        @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
+    }
+}
+

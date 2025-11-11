@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sistema-chamados-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - sistema-chamados
+    depends_on:
+      - db
+
+  nginx:
+    image: nginx:alpine
+    container_name: sistema-chamados-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - sistema-chamados
+    depends_on:
+      - app
+
+  db:
+    image: mysql:8.0
+    container_name: sistema-chamados-db
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: sistema_chamados
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: root
+      MYSQL_USER: sistema_chamados
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - sistema-chamados
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: sistema-chamados-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root
+    networks:
+      - sistema-chamados
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+
+networks:
+  sistema-chamados:
+    driver: bridge
+
+
+
+
+
+
+
+
+
+
+
