@@ -369,5 +369,53 @@ Desenvolvido com ❤️ usando Laravel 11, Tailwind CSS e Alpine.js
 4. Ao cadastrar ou editar um usuario em `/admin/users`, marque os perfis desejados para sincronizar automaticamente.
 5. Utilize a tela de perfis para manter membros e departamentos sempre atualizados.
 
+## Portfolio Mock (Estatica)
 
+Esta branch inclui uma versao publica para portfolio sem backend/banco, com dados mock locais e contratos equivalentes aos endpoints reais.
+
+Arquivos principais:
+
+- `resources/js/lib/portfolio-demo.ts`
+- `portfolio/index.html`
+- `portfolio/main.ts`
+- `vite.portfolio.config.js`
+- `.github/workflows/deploy-portfolio-pages.yml`
+
+Funcionalidades cobertas com mock:
+
+- graficos (trend, area, SLA, atendentes, status)
+- notificacoes (contador, lista recente, marcar lida/todas)
+- filtros, ordenacao e paginacao na lista de chamados
+- atualizacao de status no kanban com validacoes
+- estados de loading e erro
+
+Como executar localmente a versao portfolio:
+
+```bash
+npm install
+npx vite --config vite.portfolio.config.js
+```
+
+Como gerar build estatico:
+
+```bash
+npx vite build --config vite.portfolio.config.js
+```
+
+O build vai para a pasta `out/`.
+
+Deploy automatico no GitHub Pages:
+
+1. Ative Pages com origem em `GitHub Actions`.
+2. Faça push na branch `main`.
+3. O workflow `Deploy Portfolio (GitHub Pages)` publica `out/`.
+
+URL publicada:
+
+```text
+https://<seu-usuario>.github.io/<seu-repositorio>/
+```
+
+Observacao:
+As rotas server-only de Laravel/PHP continuam no repositorio para o sistema real, mas sao ignoradas no deploy portfolio estatico.
 
