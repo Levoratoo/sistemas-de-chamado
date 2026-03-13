@@ -1,6 +1,7 @@
 import '../resources/css/app.css';
 import Chart from 'chart.js/auto';
 import {
+    assignTicketToMe,
     createTicket,
     failNextDemoRequest,
     getAreaColorClass,
@@ -29,7 +30,8 @@ import {
     type TicketPriority,
 } from '../resources/js/lib/portfolio-demo';
 
-type ViewId = 'dashboard' | 'create' | 'tickets' | 'kanban';
+type ViewId = 'dashboard' | 'create' | 'tickets' | 'kanban' | 'ticket';
+type MainViewId = Exclude<ViewId, 'ticket'>;
 type SortableInstance = { destroy: () => void };
 type CreateTemplateId = 'suporte_ti' | 'reembolso' | 'compra';
 
@@ -45,6 +47,10 @@ const sortables: SortableInstance[] = [];
 
 const state = {
     currentView: 'dashboard' as ViewId,
+    ticketDetails: {
+        ticketId: null as number | null,
+        returnView: 'tickets' as MainViewId,
+    },
     ticketsQuery: {
         page: 1,
         per_page: 12,
@@ -139,13 +145,13 @@ const createTemplates: Record<CreateTemplateId, {
     },
 };
 
-const views: ViewId[] = ['dashboard', 'create', 'tickets', 'kanban'];
+const views: ViewId[] = ['dashboard', 'create', 'tickets', 'kanban', 'ticket'];
 const kanbanColumnsOrder: TicketColumn[] = ['queue', 'in_progress', 'waiting_user', 'finalized'];
 
 document.addEventListener('DOMContentLoaded', () => {
     bindNavigation();
     bindNotifications();
-    bindTicketDetailsModal();
+    bindTicketDetailsView();
     bindCreateTicket();
     bindTickets();
     bindKanban();
@@ -381,51 +387,49 @@ function setChartState(stateId: string, message: string, isError: boolean, hidde
     stateEl.classList.toggle('text-gray-500', !isError);
 }
 
-function bindTicketDetailsModal(): void {
-    const modal = byId<HTMLDivElement>('ticket-details-modal');
-
-    byId<HTMLButtonElement>('ticket-details-close').addEventListener('click', () => {
-        closeTicketDetailsModal();
+function bindTicketDetailsView(): void {
+    byId<HTMLButtonElement>('ticket-details-back').addEventListener('click', () => {
+        setActiveView(state.ticketDetails.returnView);
     });
 
-    modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
-            closeTicketDetailsModal();
+    byId<HTMLButtonElement>('ticket-details-refresh').addEventListener('click', () => {
+        if (!state.ticketDetails.ticketId) {
+            return;
         }
+        void loadTicketDetails(state.ticketDetails.ticketId);
     });
 
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
-            closeTicketDetailsModal();
-        }
+    byId<HTMLButtonElement>('ticket-details-assign').addEventListener('click', () => {
+        void assignTicketFromDetails();
     });
-}
-
-function closeTicketDetailsModal(): void {
-    const modal = byId<HTMLDivElement>('ticket-details-modal');
-    modal.dataset.ticketId = '';
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
 }
 
 async function openTicketDetails(ticketId: number): Promise<void> {
-    const modal = byId<HTMLDivElement>('ticket-details-modal');
+    if (state.currentView !== 'ticket') {
+        state.ticketDetails.returnView = state.currentView as MainViewId;
+    }
+
+    state.ticketDetails.ticketId = ticketId;
+    setActiveView('ticket');
+    await loadTicketDetails(ticketId);
+}
+
+async function loadTicketDetails(ticketId: number): Promise<void> {
     const stateEl = byId<HTMLDivElement>('ticket-details-state');
     const content = byId<HTMLDivElement>('ticket-details-content');
-
-    const activeToken = `${ticketId}-${Date.now()}`;
-    modal.dataset.ticketId = activeToken;
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    const assignButton = byId<HTMLButtonElement>('ticket-details-assign');
+    const requestedTicketId = ticketId;
 
     stateEl.textContent = 'Carregando detalhes...';
     stateEl.classList.remove('hidden', 'text-red-600');
     stateEl.classList.add('text-gray-500');
     content.classList.add('hidden');
+    assignButton.disabled = true;
+    assignButton.textContent = 'Aguarde...';
 
     try {
         const response = await getTicketDetails(ticketId);
-        if (modal.dataset.ticketId !== activeToken) {
+        if (state.ticketDetails.ticketId !== requestedTicketId) {
             return;
         }
 
@@ -433,7 +437,7 @@ async function openTicketDetails(ticketId: number): Promise<void> {
         stateEl.classList.add('hidden');
         content.classList.remove('hidden');
     } catch (error) {
-        if (modal.dataset.ticketId !== activeToken) {
+        if (state.ticketDetails.ticketId !== requestedTicketId) {
             return;
         }
 
@@ -444,7 +448,36 @@ async function openTicketDetails(ticketId: number): Promise<void> {
     }
 }
 
+async function assignTicketFromDetails(): Promise<void> {
+    const ticketId = state.ticketDetails.ticketId;
+    if (!ticketId) {
+        return;
+    }
+
+    const assignButton = byId<HTMLButtonElement>('ticket-details-assign');
+    const originalLabel = assignButton.textContent ?? 'Atribuir para mim';
+    assignButton.disabled = true;
+    assignButton.textContent = 'Atribuindo...';
+
+    try {
+        const response = await assignTicketToMe(ticketId);
+        showFlash(response.message);
+        await Promise.all([loadDashboard(), loadTickets(), loadKanban(), refreshNotificationCount()]);
+        if (!byId<HTMLDivElement>('notifications-dropdown').classList.contains('hidden')) {
+            await loadNotifications();
+        }
+        await loadTicketDetails(ticketId);
+    } catch (error) {
+        const message = getErrorMessage(error, 'Nao foi possivel atribuir o chamado.');
+        showFlash(message, true);
+        assignButton.disabled = false;
+        assignButton.textContent = originalLabel;
+    }
+}
+
 function renderTicketDetails(ticket: TicketListResponse['data'][number]): void {
+    const currentUser = getCurrentDemoUser();
+
     setText('ticket-details-code', ticket.code);
     setText('ticket-details-title', ticket.title);
     setText('ticket-details-area', ticket.area.name);
@@ -468,6 +501,7 @@ function renderTicketDetails(ticket: TicketListResponse['data'][number]): void {
 
     const resolvedRow = byId<HTMLDivElement>('ticket-details-resolved-row');
     const resolutionRow = byId<HTMLDivElement>('ticket-details-resolution-row');
+    const assignButton = byId<HTMLButtonElement>('ticket-details-assign');
 
     if (ticket.resolved_at) {
         setText('ticket-details-resolved', formatDateTime(ticket.resolved_at));
@@ -481,6 +515,17 @@ function renderTicketDetails(ticket: TicketListResponse['data'][number]): void {
         resolutionRow.classList.remove('hidden');
     } else {
         resolutionRow.classList.add('hidden');
+    }
+
+    if (ticket.status === 'finalized') {
+        assignButton.disabled = true;
+        assignButton.textContent = 'Chamado finalizado';
+    } else if (ticket.assignee_id === currentUser.id) {
+        assignButton.disabled = true;
+        assignButton.textContent = 'Atribuido a voce';
+    } else {
+        assignButton.disabled = false;
+        assignButton.textContent = 'Atribuir para mim';
     }
 }
 

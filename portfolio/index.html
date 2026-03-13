@@ -405,6 +405,78 @@
                         <div id="kanban-board" class="kanban-board"></div>
                     </div>
                 </section>
+
+                <section id="view-ticket" class="view-hidden space-y-6">
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                            <div>
+                                <button id="ticket-details-back" type="button" class="text-sm text-primary-600 hover:text-primary-800 font-medium">
+                                    Voltar
+                                </button>
+                                <p id="ticket-details-code" class="text-xs font-semibold text-primary-600 mt-2">CH-2026-000000</p>
+                                <h2 id="ticket-details-title" class="text-2xl font-bold text-gray-900 mt-1">Detalhes do chamado</h2>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button id="ticket-details-refresh" type="button" class="btn btn-secondary">Atualizar</button>
+                                <button id="ticket-details-assign" type="button" class="btn btn-primary">Atribuir para mim</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white shadow-sm rounded-lg p-6 space-y-5">
+                        <div id="ticket-details-state" class="text-sm text-gray-500">Carregando detalhes...</div>
+
+                        <div id="ticket-details-content" class="hidden space-y-5">
+                            <div class="flex flex-wrap gap-2">
+                                <span id="ticket-details-request-type" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Tipo</span>
+                                <span id="ticket-details-status" class="badge badge-info">Status</span>
+                                <span id="ticket-details-priority" class="badge badge-warning">Prioridade</span>
+                                <span id="ticket-details-sla" class="badge badge-success">SLA</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <p class="text-gray-500">Area</p>
+                                    <p id="ticket-details-area" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-500">Solicitante</p>
+                                    <p id="ticket-details-requester" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-500">Responsavel</p>
+                                    <p id="ticket-details-assignee" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-500">Criado em</p>
+                                    <p id="ticket-details-created" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-500">Atualizado em</p>
+                                    <p id="ticket-details-updated" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-500">Prazo SLA</p>
+                                    <p id="ticket-details-due" class="text-gray-900 font-medium">-</p>
+                                </div>
+                                <div id="ticket-details-resolved-row" class="hidden">
+                                    <p class="text-gray-500">Resolvido em</p>
+                                    <p id="ticket-details-resolved" class="text-gray-900 font-medium">-</p>
+                                </div>
+                            </div>
+
+                            <div id="ticket-details-resolution-row" class="hidden">
+                                <p class="text-sm text-gray-500">Resumo da resolucao</p>
+                                <p id="ticket-details-resolution" class="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-line">-</p>
+                            </div>
+
+                            <div>
+                                <p class="text-sm text-gray-500">Descricao</p>
+                                <p id="ticket-details-description" class="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-line">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </main>
     </div>
@@ -428,72 +500,6 @@
             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
                 <button id="kanban-action-cancel" type="button" class="btn btn-secondary">Cancelar</button>
                 <button id="kanban-action-confirm" type="button" class="btn btn-primary">Confirmar</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="ticket-details-modal" class="hidden fixed inset-0 z-50 bg-black/60 items-center justify-center px-4">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                    <p id="ticket-details-code" class="text-xs font-semibold text-primary-600">CH-2026-000000</p>
-                    <h3 id="ticket-details-title" class="text-lg font-semibold text-gray-900 truncate">Detalhes do chamado</h3>
-                </div>
-                <button id="ticket-details-close" type="button" class="btn btn-secondary btn-sm">Fechar</button>
-            </div>
-
-            <div class="px-6 py-4 overflow-y-auto space-y-5">
-                <div id="ticket-details-state" class="text-sm text-gray-500">Carregando detalhes...</div>
-
-                <div id="ticket-details-content" class="hidden space-y-5">
-                    <div class="flex flex-wrap gap-2">
-                        <span id="ticket-details-request-type" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Tipo</span>
-                        <span id="ticket-details-status" class="badge badge-info">Status</span>
-                        <span id="ticket-details-priority" class="badge badge-warning">Prioridade</span>
-                        <span id="ticket-details-sla" class="badge badge-success">SLA</span>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <p class="text-gray-500">Area</p>
-                            <p id="ticket-details-area" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Solicitante</p>
-                            <p id="ticket-details-requester" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Responsavel</p>
-                            <p id="ticket-details-assignee" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Criado em</p>
-                            <p id="ticket-details-created" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Atualizado em</p>
-                            <p id="ticket-details-updated" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Prazo SLA</p>
-                            <p id="ticket-details-due" class="text-gray-900 font-medium">-</p>
-                        </div>
-                        <div id="ticket-details-resolved-row" class="hidden">
-                            <p class="text-gray-500">Resolvido em</p>
-                            <p id="ticket-details-resolved" class="text-gray-900 font-medium">-</p>
-                        </div>
-                    </div>
-
-                    <div id="ticket-details-resolution-row" class="hidden">
-                        <p class="text-sm text-gray-500">Resumo da resolucao</p>
-                        <p id="ticket-details-resolution" class="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-line">-</p>
-                    </div>
-
-                    <div>
-                        <p class="text-sm text-gray-500">Descricao</p>
-                        <p id="ticket-details-description" class="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-line">-</p>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

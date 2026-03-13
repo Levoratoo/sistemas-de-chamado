@@ -125,6 +125,11 @@ export interface TicketDetailsResponse {
     ticket: TicketListResponse['data'][number];
 }
 
+export interface AssignTicketResponse {
+    message: string;
+    ticket: TicketListResponse['data'][number];
+}
+
 export interface DashboardSummary {
     totalTickets: number;
     ticketsThisMonth: number;
@@ -741,6 +746,37 @@ export async function getTicketDetails(ticketId: number): Promise<TicketDetailsR
     }, 'Nao foi possivel carregar os detalhes do chamado.');
 }
 
+export async function assignTicketToMe(ticketId: number): Promise<AssignTicketResponse> {
+    return simulateRequest(() => {
+        const ticket = ticketsStore.find((item) => item.id === ticketId);
+        if (!ticket) {
+            throw buildError('Chamado nao encontrado.', 404);
+        }
+
+        if (ticket.status === 'finalized') {
+            throw buildError('Chamado finalizado nao pode ser atribuido.', 422);
+        }
+
+        const alreadyAssignedToMe = ticket.assignee_id === CURRENT_USER_ID;
+        if (!alreadyAssignedToMe) {
+            ticket.assignee_id = CURRENT_USER_ID;
+            ticket.assignee = getCurrentDemoUser();
+            if (ticket.status === 'open') {
+                ticket.status = 'in_progress';
+            }
+            ticket.updated_at = NOW.toISOString();
+            notificationsStore.unshift(createTicketAssignedNotification(ticket));
+        }
+
+        return {
+            message: alreadyAssignedToMe
+                ? `${ticket.code} ja esta atribuido para voce.`
+                : `${ticket.code} foi atribuido para voce.`,
+            ticket: toTicketView(ticket),
+        };
+    }, 'Nao foi possivel atribuir o chamado.');
+}
+
 export async function getKanbanBoard(filters: Pick<TicketListQuery, 'search' | 'assigned_to_me' | 'my_tickets'> = {}): Promise<KanbanBoardResponse> {
     return simulateRequest(() => {
         let list = ticketsStore.slice();
@@ -1300,6 +1336,24 @@ function createTicketCreatedNotification(ticket: DemoTicket): DemoNotification {
             assignee_name: ticket.assignee?.name,
             priority: ticket.priority,
             category: 'ticket_created',
+        },
+    };
+}
+
+function createTicketAssignedNotification(ticket: DemoTicket): DemoNotification {
+    return {
+        id: `ntf-${Math.random().toString(16).slice(2, 10)}`,
+        type: 'App\\Notifications\\TicketAssignedNotification',
+        read_at: null,
+        created_at: NOW.toISOString(),
+        data: {
+            message: `${ticket.code} foi atribuido para ${getCurrentDemoUser().name}.`,
+            ticket_id: ticket.id,
+            ticket_type: getRequestTypeLabel(ticket.request_type),
+            requester_name: ticket.requester.name,
+            assignee_name: ticket.assignee?.name,
+            priority: ticket.priority,
+            category: 'ticket_assigned',
         },
     };
 }
