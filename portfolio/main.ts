@@ -9,6 +9,7 @@ import {
     getDashboardSummary,
     getDemoAreas,
     getDemoRequestTypes,
+    getTicketDetails,
     getKanbanBoard,
     getRecentNotifications,
     getRequestTypeClass,
@@ -144,6 +145,7 @@ const kanbanColumnsOrder: TicketColumn[] = ['queue', 'in_progress', 'waiting_use
 document.addEventListener('DOMContentLoaded', () => {
     bindNavigation();
     bindNotifications();
+    bindTicketDetailsModal();
     bindCreateTicket();
     bindTickets();
     bindKanban();
@@ -379,6 +381,121 @@ function setChartState(stateId: string, message: string, isError: boolean, hidde
     stateEl.classList.toggle('text-gray-500', !isError);
 }
 
+function bindTicketDetailsModal(): void {
+    const modal = byId<HTMLDivElement>('ticket-details-modal');
+
+    byId<HTMLButtonElement>('ticket-details-close').addEventListener('click', () => {
+        closeTicketDetailsModal();
+    });
+
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            closeTicketDetailsModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closeTicketDetailsModal();
+        }
+    });
+}
+
+function closeTicketDetailsModal(): void {
+    const modal = byId<HTMLDivElement>('ticket-details-modal');
+    modal.dataset.ticketId = '';
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+async function openTicketDetails(ticketId: number): Promise<void> {
+    const modal = byId<HTMLDivElement>('ticket-details-modal');
+    const stateEl = byId<HTMLDivElement>('ticket-details-state');
+    const content = byId<HTMLDivElement>('ticket-details-content');
+
+    const activeToken = `${ticketId}-${Date.now()}`;
+    modal.dataset.ticketId = activeToken;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    stateEl.textContent = 'Carregando detalhes...';
+    stateEl.classList.remove('hidden', 'text-red-600');
+    stateEl.classList.add('text-gray-500');
+    content.classList.add('hidden');
+
+    try {
+        const response = await getTicketDetails(ticketId);
+        if (modal.dataset.ticketId !== activeToken) {
+            return;
+        }
+
+        renderTicketDetails(response.ticket);
+        stateEl.classList.add('hidden');
+        content.classList.remove('hidden');
+    } catch (error) {
+        if (modal.dataset.ticketId !== activeToken) {
+            return;
+        }
+
+        stateEl.textContent = getErrorMessage(error, 'Erro ao carregar detalhes do chamado.');
+        stateEl.classList.remove('text-gray-500');
+        stateEl.classList.add('text-red-600');
+        content.classList.add('hidden');
+    }
+}
+
+function renderTicketDetails(ticket: TicketListResponse['data'][number]): void {
+    setText('ticket-details-code', ticket.code);
+    setText('ticket-details-title', ticket.title);
+    setText('ticket-details-area', ticket.area.name);
+    setText('ticket-details-requester', ticket.requester.name);
+    setText('ticket-details-assignee', ticket.assignee?.name ?? 'Nao atribuido');
+    setText('ticket-details-created', formatDateTime(ticket.created_at));
+    setText('ticket-details-updated', formatDateTime(ticket.updated_at));
+    setText('ticket-details-due', formatDateTime(ticket.due_at));
+    setText('ticket-details-description', ticket.description);
+
+    const slaClass = ticket.sla_status === 'overdue'
+        ? 'badge-danger'
+        : ticket.sla_status === 'warning'
+            ? 'badge-warning'
+            : 'badge-success';
+
+    setBadge('ticket-details-status', ticket.status_label, ticket.status_badge_class);
+    setBadge('ticket-details-priority', ticket.priority_label, ticket.priority_badge_class);
+    setBadge('ticket-details-sla', ticket.sla_label, slaClass);
+    setPill('ticket-details-request-type', ticket.request_type_label, getRequestTypeClass(ticket.request_type));
+
+    const resolvedRow = byId<HTMLDivElement>('ticket-details-resolved-row');
+    const resolutionRow = byId<HTMLDivElement>('ticket-details-resolution-row');
+
+    if (ticket.resolved_at) {
+        setText('ticket-details-resolved', formatDateTime(ticket.resolved_at));
+        resolvedRow.classList.remove('hidden');
+    } else {
+        resolvedRow.classList.add('hidden');
+    }
+
+    if (ticket.resolution_summary && ticket.resolution_summary.trim().length > 0) {
+        setText('ticket-details-resolution', ticket.resolution_summary);
+        resolutionRow.classList.remove('hidden');
+    } else {
+        resolutionRow.classList.add('hidden');
+    }
+}
+
+function setBadge(id: string, text: string, badgeClass: string): void {
+    const element = byId<HTMLSpanElement>(id);
+    element.className = `badge ${badgeClass}`;
+    element.textContent = text;
+}
+
+function setPill(id: string, text: string, classes: string): void {
+    const element = byId<HTMLSpanElement>(id);
+    element.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classes}`;
+    element.textContent = text;
+}
+
 function bindCreateTicket(): void {
     const form = byId<HTMLFormElement>('create-ticket-form');
     const requestTypeSelect = byId<HTMLSelectElement>('create-request-type');
@@ -545,6 +662,8 @@ function isTicketPriority(value: string): value is TicketPriority {
 
 function bindTickets(): void {
     const form = byId<HTMLFormElement>('tickets-filters');
+    const body = byId<HTMLTableSectionElement>('tickets-table-body');
+
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         state.ticketsQuery = {
@@ -593,6 +712,22 @@ function bindTickets(): void {
         void loadTickets();
     });
 
+    body.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const button = target.closest<HTMLElement>('[data-open-ticket-id]');
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+        const ticketId = Number(button.dataset.openTicketId);
+        if (!ticketId) {
+            return;
+        }
+
+        void openTicketDetails(ticketId);
+    });
+
     const sortableHeaders = Array.from(document.querySelectorAll<HTMLTableHeaderCellElement>('th[data-sort]'));
     const allowedSorts = new Set(['code', 'title', 'created_at', 'updated_at', 'priority', 'status']);
 
@@ -638,22 +773,39 @@ function renderTickets(response: TicketListResponse): void {
             const requestTypeClass = getRequestTypeClass(ticket.request_type);
             const areaClass = getAreaColorClass(ticket.area.name);
             const slaClass = ticket.sla_status === 'overdue' ? 'badge-danger' : ticket.sla_status === 'warning' ? 'badge-warning' : 'badge-success';
+            const code = escapeHtml(ticket.code);
+            const requestTypeLabel = escapeHtml(ticket.request_type_label);
+            const title = escapeHtml(ticket.title);
+            const areaName = escapeHtml(ticket.area.name);
+            const statusLabel = escapeHtml(ticket.status_label);
+            const priorityLabel = escapeHtml(ticket.priority_label);
+            const slaLabel = escapeHtml(ticket.sla_label);
+            const assigneeName = escapeHtml(ticket.assignee?.name ?? '-');
+            const updatedHuman = escapeHtml(ticket.updated_human);
 
             return `
                 <tr class="hover:bg-gray-50 align-top">
-                    <td class="px-4 py-4 text-sm font-semibold text-primary-600">${ticket.code}</td>
-                    <td class="px-4 py-4 text-sm text-gray-700">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${requestTypeClass}">${ticket.request_type_label}</span>
+                    <td class="px-4 py-4 text-sm font-semibold">
+                        <button type="button" data-open-ticket-id="${ticket.id}" class="text-primary-600 hover:underline text-left">
+                            ${code}
+                        </button>
                     </td>
-                    <td class="px-4 py-4 text-sm text-gray-900 max-w-xs truncate">${ticket.title}</td>
                     <td class="px-4 py-4 text-sm text-gray-700">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${areaClass}">${ticket.area.name}</span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${requestTypeClass}">${requestTypeLabel}</span>
                     </td>
-                    <td class="px-4 py-4"><span class="badge ${ticket.status_badge_class}">${ticket.status_label}</span></td>
-                    <td class="px-4 py-4"><span class="badge ${ticket.priority_badge_class}">${ticket.priority_label}</span></td>
-                    <td class="px-4 py-4"><span class="badge ${slaClass}">${ticket.sla_label}</span></td>
-                    <td class="px-4 py-4 text-sm text-gray-600">${ticket.assignee?.name ?? '-'}</td>
-                    <td class="px-4 py-4 text-sm text-gray-500">${ticket.updated_human}</td>
+                    <td class="px-4 py-4 text-sm text-gray-900 max-w-xs truncate">
+                        <button type="button" data-open-ticket-id="${ticket.id}" class="hover:underline text-left truncate max-w-xs">
+                            ${title}
+                        </button>
+                    </td>
+                    <td class="px-4 py-4 text-sm text-gray-700">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${areaClass}">${areaName}</span>
+                    </td>
+                    <td class="px-4 py-4"><span class="badge ${ticket.status_badge_class}">${statusLabel}</span></td>
+                    <td class="px-4 py-4"><span class="badge ${ticket.priority_badge_class}">${priorityLabel}</span></td>
+                    <td class="px-4 py-4"><span class="badge ${slaClass}">${slaLabel}</span></td>
+                    <td class="px-4 py-4 text-sm text-gray-600">${assigneeName}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${updatedHuman}</td>
                 </tr>
             `;
         }).join('');
@@ -667,6 +819,8 @@ function renderTickets(response: TicketListResponse): void {
 
 function bindKanban(): void {
     const form = byId<HTMLFormElement>('kanban-filters');
+    const board = byId<HTMLDivElement>('kanban-board');
+
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         state.kanbanFilters.search = formValue('kanban-search');
@@ -688,6 +842,24 @@ function bindKanban(): void {
 
     byId<HTMLButtonElement>('kanban-action-confirm').addEventListener('click', () => {
         void confirmKanbanAction();
+    });
+
+    board.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const button = target.closest<HTMLElement>('[data-open-ticket-id]');
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const ticketId = Number(button.dataset.openTicketId);
+        if (!ticketId) {
+            return;
+        }
+
+        void openTicketDetails(ticketId);
     });
 }
 
@@ -720,23 +892,39 @@ function renderKanban(columnsMeta: Record<TicketColumn, { label: string; descrip
                     <p class="text-xs text-gray-500 mt-2">${column.description}</p>
                 </header>
                 <div class="kanban-column__body" data-dropzone data-status="${columnKey}">
-                    ${columnTickets.map((ticket) => `
-                        <article class="kanban-card ${ticket.card_class}" data-ticket-id="${ticket.id}">
-                            <div class="p-4 space-y-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-semibold text-primary-600">${ticket.code}</span>
-                                    <span class="badge ${ticket.priority_badge}">${ticket.priority_label}</span>
+                    ${columnTickets.map((ticket) => {
+                        const code = escapeHtml(ticket.code);
+                        const title = escapeHtml(ticket.title);
+                        const priorityLabel = escapeHtml(ticket.priority_label);
+                        const statusLabel = escapeHtml(ticket.status_label);
+                        const requester = escapeHtml(ticket.requester);
+                        const assignee = escapeHtml(ticket.assignee ?? 'Nao atribuido');
+                        const updatedHuman = escapeHtml(ticket.updated_human);
+
+                        return `
+                            <article class="kanban-card ${ticket.card_class}" data-ticket-id="${ticket.id}">
+                                <div class="p-4 space-y-3">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <button type="button" data-open-ticket-id="${ticket.id}" class="text-xs font-semibold text-primary-600 hover:underline">
+                                            ${code}
+                                        </button>
+                                        <span class="badge ${ticket.priority_badge}">${priorityLabel}</span>
+                                    </div>
+                                    <h4 class="text-sm font-semibold text-gray-900 line-clamp-2">
+                                        <button type="button" data-open-ticket-id="${ticket.id}" class="hover:underline text-left">
+                                            ${title}
+                                        </button>
+                                    </h4>
+                                    <div class="space-y-1 text-xs text-gray-500">
+                                        <p><span class="text-gray-400">Status:</span> ${statusLabel}</p>
+                                        <p><span class="text-gray-400">Solicitante:</span> ${requester}</p>
+                                        <p><span class="text-gray-400">Responsavel:</span> ${assignee}</p>
+                                        <p><span class="text-gray-400">Atualizado:</span> ${updatedHuman}</p>
+                                    </div>
                                 </div>
-                                <h4 class="text-sm font-semibold text-gray-900 line-clamp-2">${ticket.title}</h4>
-                                <div class="space-y-1 text-xs text-gray-500">
-                                    <p><span class="text-gray-400">Status:</span> ${ticket.status_label}</p>
-                                    <p><span class="text-gray-400">Solicitante:</span> ${ticket.requester}</p>
-                                    <p><span class="text-gray-400">Responsavel:</span> ${ticket.assignee ?? 'Nao atribuido'}</p>
-                                    <p><span class="text-gray-400">Atualizado:</span> ${ticket.updated_human}</p>
-                                </div>
-                            </div>
-                        </article>
-                    `).join('')}
+                            </article>
+                        `;
+                    }).join('')}
                 </div>
             </section>
         `;
@@ -759,6 +947,8 @@ function renderKanban(columnsMeta: Record<TicketColumn, { label: string; descrip
             animation: 150,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
+            filter: '[data-open-ticket-id]',
+            preventOnFilter: false,
             onEnd: (event) => {
                 const item = event.item as HTMLElement;
                 const ticketId = Number(item.dataset.ticketId);

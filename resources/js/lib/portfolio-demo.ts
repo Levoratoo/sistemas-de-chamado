@@ -121,6 +121,10 @@ export interface CreateTicketResponse {
     ticket: TicketListResponse['data'][number];
 }
 
+export interface TicketDetailsResponse {
+    ticket: TicketListResponse['data'][number];
+}
+
 export interface DashboardSummary {
     totalTickets: number;
     ticketsThisMonth: number;
@@ -722,6 +726,19 @@ export async function createTicket(payload: CreateTicketPayload): Promise<Create
             ticket: toTicketView(ticket),
         };
     }, 'Nao foi possivel abrir o chamado.');
+}
+
+export async function getTicketDetails(ticketId: number): Promise<TicketDetailsResponse> {
+    return simulateRequest(() => {
+        const ticket = ticketsStore.find((item) => item.id === ticketId);
+        if (!ticket) {
+            throw buildError('Chamado nao encontrado.', 404);
+        }
+
+        return {
+            ticket: toTicketView(ticket),
+        };
+    }, 'Nao foi possivel carregar os detalhes do chamado.');
 }
 
 export async function getKanbanBoard(filters: Pick<TicketListQuery, 'search' | 'assigned_to_me' | 'my_tickets'> = {}): Promise<KanbanBoardResponse> {
