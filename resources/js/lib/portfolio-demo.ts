@@ -107,6 +107,20 @@ export interface TicketListResponse {
     };
 }
 
+export interface CreateTicketPayload {
+    title: string;
+    description: string;
+    request_type: string;
+    area_id: number;
+    priority: TicketPriority;
+    extra_fields?: Record<string, string>;
+}
+
+export interface CreateTicketResponse {
+    message: string;
+    ticket: TicketListResponse['data'][number];
+}
+
 export interface DashboardSummary {
     totalTickets: number;
     ticketsThisMonth: number;
@@ -209,6 +223,8 @@ const requestTypeLabels: Record<string, string> = {
     pagamento_importacoes: 'Pagamento de Importacoes',
     rh: 'RH',
     contabilidade: 'Contabilidade',
+    suporte_ti: 'Suporte TI',
+    compra: 'Pedido de Compra',
 };
 
 const requestTypeColors: Record<string, string> = {
@@ -220,6 +236,8 @@ const requestTypeColors: Record<string, string> = {
     pagamento_importacoes: 'bg-blue-100 text-blue-800',
     rh: 'bg-indigo-100 text-indigo-800',
     contabilidade: 'bg-red-100 text-red-800',
+    suporte_ti: 'bg-cyan-100 text-cyan-800',
+    compra: 'bg-emerald-100 text-emerald-800',
 };
 
 const priorityOrder: Record<TicketPriority, number> = {
@@ -635,6 +653,77 @@ export async function listTickets(query: TicketListQuery = {}): Promise<TicketLi
     }, 'Nao foi possivel carregar a listagem de chamados.');
 }
 
+export async function createTicket(payload: CreateTicketPayload): Promise<CreateTicketResponse> {
+    return simulateRequest(() => {
+        const title = payload.title?.trim() ?? '';
+        const description = payload.description?.trim() ?? '';
+
+        if (title.length < 5) {
+            throw buildError('Informe um titulo com pelo menos 5 caracteres.', 422);
+        }
+
+        if (description.length < 10) {
+            throw buildError('Informe uma descricao com pelo menos 10 caracteres.', 422);
+        }
+
+        if (!requestTypeLabels[payload.request_type]) {
+            throw buildError('Tipo de solicitacao invalido.', 422);
+        }
+
+        const area = areas.find((item) => item.id === Number(payload.area_id));
+        if (!area) {
+            throw buildError('Area invalida para abertura do chamado.', 422);
+        }
+
+        if (!isTicketPriority(payload.priority)) {
+            throw buildError('Prioridade invalida.', 422);
+        }
+
+        const nextId = ticketsStore.reduce((max, ticket) => Math.max(max, ticket.id), 0) + 1;
+        const createdAt = NOW.toISOString();
+        const dueAt = addDays(NOW, getDueDaysByPriority(payload.priority)).toISOString();
+
+        const extraFields = Object.entries(payload.extra_fields ?? {})
+            .map(([key, value]) => [key, String(value).trim()] as const)
+            .filter(([, value]) => value.length > 0);
+
+        const descriptionWithMetadata = [
+            description,
+            ...(extraFields.length
+                ? ['', 'Campos adicionais:', ...extraFields.map(([key, value]) => `- ${formatExtraFieldLabel(key)}: ${value}`)]
+                : []),
+        ].join('\n');
+
+        const ticket: DemoTicket = {
+            id: nextId,
+            code: buildTicketCode(nextId),
+            title,
+            description: descriptionWithMetadata,
+            status: 'open',
+            priority: payload.priority,
+            request_type: payload.request_type,
+            area,
+            requester: getCurrentDemoUser(),
+            assignee: null,
+            assignee_id: null,
+            resolution_by: null,
+            resolution_summary: null,
+            created_at: createdAt,
+            updated_at: createdAt,
+            resolved_at: null,
+            due_at: dueAt,
+        };
+
+        ticketsStore = [ticket, ...ticketsStore];
+        notificationsStore.unshift(createTicketCreatedNotification(ticket));
+
+        return {
+            message: `Chamado ${ticket.code} aberto com sucesso.`,
+            ticket: toTicketView(ticket),
+        };
+    }, 'Nao foi possivel abrir o chamado.');
+}
+
 export async function getKanbanBoard(filters: Pick<TicketListQuery, 'search' | 'assigned_to_me' | 'my_tickets'> = {}): Promise<KanbanBoardResponse> {
     return simulateRequest(() => {
         let list = ticketsStore.slice();
@@ -959,6 +1048,36 @@ function getPriorityBadgeClass(priority: TicketPriority): string {
     }
 }
 
+function isTicketPriority(value: string): value is TicketPriority {
+    return value === 'low' || value === 'medium' || value === 'high' || value === 'critical';
+}
+
+function getDueDaysByPriority(priority: TicketPriority): number {
+    switch (priority) {
+        case 'critical':
+            return 2;
+        case 'high':
+            return 3;
+        case 'medium':
+            return 5;
+        case 'low':
+        default:
+            return 7;
+    }
+}
+
+function buildTicketCode(id: number): string {
+    return `CH-${NOW.getUTCFullYear()}-${String(id).padStart(6, '0')}`;
+}
+
+function formatExtraFieldLabel(key: string): string {
+    return key
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function getStatusBadgeClass(status: TicketStatus): string {
     switch (status) {
         case 'open':
@@ -1146,6 +1265,24 @@ function createSystemNotification(ticket: DemoTicket, category: 'ticket_finalize
             assignee_name: ticket.assignee?.name,
             priority: ticket.priority,
             category,
+        },
+    };
+}
+
+function createTicketCreatedNotification(ticket: DemoTicket): DemoNotification {
+    return {
+        id: `ntf-${Math.random().toString(16).slice(2, 10)}`,
+        type: 'App\\Notifications\\TicketCreatedNotification',
+        read_at: null,
+        created_at: NOW.toISOString(),
+        data: {
+            message: `${ticket.code} foi aberto em ${ticket.area.name}.`,
+            ticket_id: ticket.id,
+            ticket_type: getRequestTypeLabel(ticket.request_type),
+            requester_name: ticket.requester.name,
+            assignee_name: ticket.assignee?.name,
+            priority: ticket.priority,
+            category: 'ticket_created',
         },
     };
 }

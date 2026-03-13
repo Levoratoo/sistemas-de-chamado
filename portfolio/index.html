@@ -88,6 +88,9 @@
                             <button type="button" data-view="dashboard" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">
                                 Dashboard
                             </button>
+                            <button type="button" data-view="create" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">
+                                Abrir Chamado
+                            </button>
                             <button type="button" data-view="tickets" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">
                                 Chamados
                             </button>
@@ -201,6 +204,80 @@
                         <div class="relative h-72">
                             <canvas id="statusDistributionChart"></canvas>
                             <div id="statusDistributionChartState" class="absolute inset-0 flex items-center justify-center text-sm text-gray-500 bg-white/80">Carregando...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-create" class="view-hidden space-y-6">
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <h2 class="text-2xl font-bold text-gray-900">Abrir Chamado</h2>
+                        <p class="text-sm text-gray-500 mt-1">Módulo de exemplo para abertura de chamados com dados mock.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white shadow-sm rounded-lg p-5">
+                            <h3 class="text-sm font-semibold text-gray-900 mb-4">Modelos de Exemplo</h3>
+                            <div id="create-template-list" class="space-y-3">
+                                <button type="button" data-template="suporte_ti" class="w-full text-left p-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition">
+                                    <p class="text-sm font-semibold text-blue-800">Suporte TI - Acesso</p>
+                                    <p class="text-xs text-blue-700 mt-1">Exemplo para demandas técnicas com prioridade alta.</p>
+                                </button>
+                                <button type="button" data-template="reembolso" class="w-full text-left p-3 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 transition">
+                                    <p class="text-sm font-semibold text-purple-800">Solicitação de Reembolso</p>
+                                    <p class="text-xs text-purple-700 mt-1">Exemplo financeiro com campos de valor e centro de custo.</p>
+                                </button>
+                                <button type="button" data-template="compra" class="w-full text-left p-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition">
+                                    <p class="text-sm font-semibold text-emerald-800">Pedido de Compra</p>
+                                    <p class="text-xs text-emerald-700 mt-1">Exemplo para compras e fornecedores.</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 bg-white shadow-sm rounded-lg p-6">
+                            <form id="create-ticket-form" class="space-y-5">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="create-title" class="text-sm font-medium text-gray-700">Título</label>
+                                        <input id="create-title" name="title" type="text" class="form-input mt-1" placeholder="Resumo do chamado">
+                                    </div>
+                                    <div>
+                                        <label for="create-request-type" class="text-sm font-medium text-gray-700">Tipo de Solicitação</label>
+                                        <select id="create-request-type" name="request_type" class="form-select mt-1">
+                                            <option value="">Selecione</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="create-area" class="text-sm font-medium text-gray-700">Área</label>
+                                        <select id="create-area" name="area_id" class="form-select mt-1">
+                                            <option value="">Selecione</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="create-priority" class="text-sm font-medium text-gray-700">Prioridade</label>
+                                        <select id="create-priority" name="priority" class="form-select mt-1">
+                                            <option value="low">Baixa</option>
+                                            <option value="medium" selected>Média</option>
+                                            <option value="high">Alta</option>
+                                            <option value="critical">Crítica</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div id="create-extra-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+                                <div>
+                                    <label for="create-description" class="text-sm font-medium text-gray-700">Descrição</label>
+                                    <textarea id="create-description" name="description" rows="6" class="form-textarea mt-1 w-full" placeholder="Descreva os detalhes da solicitação."></textarea>
+                                </div>
+
+                                <div class="flex items-center justify-between gap-3">
+                                    <p id="create-ticket-status" class="text-sm text-gray-500">Selecione um modelo para preencher rapidamente.</p>
+                                    <div class="flex gap-2">
+                                        <button id="create-reset" type="button" class="btn btn-secondary">Limpar</button>
+                                        <button id="create-submit" type="submit" class="btn btn-primary">Abrir Chamado</button>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </section>

@@ -1,6 +1,7 @@
 import '../resources/css/app.css';
 import Chart from 'chart.js/auto';
 import {
+    createTicket,
     failNextDemoRequest,
     getAreaColorClass,
     getAttendantPerformanceChart,
@@ -24,10 +25,12 @@ import {
     type TicketColumn,
     type TicketListQuery,
     type TicketListResponse,
+    type TicketPriority,
 } from '../resources/js/lib/portfolio-demo';
 
-type ViewId = 'dashboard' | 'tickets' | 'kanban';
+type ViewId = 'dashboard' | 'create' | 'tickets' | 'kanban';
 type SortableInstance = { destroy: () => void };
+type CreateTemplateId = 'suporte_ti' | 'reembolso' | 'compra';
 
 declare global {
     interface Window {
@@ -71,12 +74,77 @@ const state = {
     },
 };
 
-const views: ViewId[] = ['dashboard', 'tickets', 'kanban'];
+const createExtraFieldMap: Record<string, Array<{ key: string; label: string; placeholder: string }>> = {
+    suporte_ti: [
+        { key: 'equipamento', label: 'Equipamento', placeholder: 'Ex.: Notebook Dell Latitude' },
+        { key: 'setor', label: 'Setor', placeholder: 'Ex.: Comercial' },
+        { key: 'ramal', label: 'Ramal', placeholder: 'Ex.: 214' },
+    ],
+    reembolso: [
+        { key: 'valor', label: 'Valor', placeholder: 'Ex.: R$ 189,90' },
+        { key: 'centro_custo', label: 'Centro de Custo', placeholder: 'Ex.: FIN-023' },
+        { key: 'fornecedor', label: 'Fornecedor', placeholder: 'Ex.: Posto XYZ' },
+    ],
+    compra: [
+        { key: 'item', label: 'Item', placeholder: 'Ex.: Bobina BOPP 30 micras' },
+        { key: 'quantidade', label: 'Quantidade', placeholder: 'Ex.: 20 unidades' },
+        { key: 'fornecedor', label: 'Fornecedor sugerido', placeholder: 'Ex.: Embala Sul' },
+    ],
+};
+
+const createTemplates: Record<CreateTemplateId, {
+    title: string;
+    request_type: string;
+    area_id: number;
+    priority: TicketPriority;
+    description: string;
+    extra_fields: Record<string, string>;
+}> = {
+    suporte_ti: {
+        title: 'Usuario sem acesso ao ERP no setor comercial',
+        request_type: 'suporte_ti',
+        area_id: 2,
+        priority: 'high',
+        description: 'Usuario reporta erro de login no ERP desde o inicio do expediente. Necessario normalizar o acesso para continuidade das atividades.',
+        extra_fields: {
+            equipamento: 'Notebook Dell Latitude 5430',
+            setor: 'Comercial',
+            ramal: '214',
+        },
+    },
+    reembolso: {
+        title: 'Reembolso de despesa de viagem comercial',
+        request_type: 'reembolso',
+        area_id: 1,
+        priority: 'medium',
+        description: 'Solicitacao de reembolso referente a deslocamento para visita tecnica em cliente. Documentacao fiscal anexada no fluxo real.',
+        extra_fields: {
+            valor: 'R$ 286,40',
+            centro_custo: 'FIN-109',
+            fornecedor: 'Rede Posto Brasil',
+        },
+    },
+    compra: {
+        title: 'Compra de insumos para reposicao de estoque',
+        request_type: 'compra',
+        area_id: 3,
+        priority: 'medium',
+        description: 'Necessaria aprovacao de pedido para reposicao de insumos criticos da linha de producao.',
+        extra_fields: {
+            item: 'Filme stretch industrial 500mm',
+            quantidade: '30 rolos',
+            fornecedor: 'Pack Solutions',
+        },
+    },
+};
+
+const views: ViewId[] = ['dashboard', 'create', 'tickets', 'kanban'];
 const kanbanColumnsOrder: TicketColumn[] = ['queue', 'in_progress', 'waiting_user', 'finalized'];
 
 document.addEventListener('DOMContentLoaded', () => {
     bindNavigation();
     bindNotifications();
+    bindCreateTicket();
     bindTickets();
     bindKanban();
     hydrateStaticData();
@@ -96,20 +164,25 @@ function hydrateStaticData(): void {
     const currentUser = getCurrentDemoUser();
     setText('current-user-name', currentUser.name);
 
-    const requestTypeSelect = byId<HTMLSelectElement>('filter-request-type');
-    getDemoRequestTypes().forEach((type) => {
+    const requestTypes = getDemoRequestTypes();
+    const filterRequestTypeSelect = byId<HTMLSelectElement>('filter-request-type');
+    const createRequestTypeSelect = byId<HTMLSelectElement>('create-request-type');
+    requestTypes.forEach((type) => {
         const option = document.createElement('option');
         option.value = type.value;
         option.textContent = type.label;
-        requestTypeSelect.appendChild(option);
+        filterRequestTypeSelect.appendChild(option);
+        createRequestTypeSelect.appendChild(option.cloneNode(true));
     });
 
-    const areaSelect = byId<HTMLSelectElement>('filter-area');
+    const filterAreaSelect = byId<HTMLSelectElement>('filter-area');
+    const createAreaSelect = byId<HTMLSelectElement>('create-area');
     getDemoAreas().forEach((area) => {
         const option = document.createElement('option');
         option.value = String(area.id);
         option.textContent = area.name;
-        areaSelect.appendChild(option);
+        filterAreaSelect.appendChild(option);
+        createAreaSelect.appendChild(option.cloneNode(true));
     });
 }
 
@@ -304,6 +377,170 @@ function setChartState(stateId: string, message: string, isError: boolean, hidde
     stateEl.textContent = message;
     stateEl.classList.toggle('text-red-600', isError);
     stateEl.classList.toggle('text-gray-500', !isError);
+}
+
+function bindCreateTicket(): void {
+    const form = byId<HTMLFormElement>('create-ticket-form');
+    const requestTypeSelect = byId<HTMLSelectElement>('create-request-type');
+    const templateButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#create-template-list button[data-template]'));
+    const submitButton = byId<HTMLButtonElement>('create-submit');
+    const resetButton = byId<HTMLButtonElement>('create-reset');
+
+    requestTypeSelect.addEventListener('change', () => {
+        renderCreateExtraFields(requestTypeSelect.value, getCreateExtraFieldValues());
+    });
+
+    templateButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const templateId = button.dataset.template as CreateTemplateId | undefined;
+            if (!templateId || !createTemplates[templateId]) {
+                return;
+            }
+
+            applyCreateTemplate(templateId);
+            setCreateStatus('Modelo aplicado. Ajuste os dados e clique em Abrir Chamado.');
+        });
+    });
+
+    resetButton.addEventListener('click', () => {
+        form.reset();
+        renderCreateExtraFields('');
+        setCreateStatus('Selecione um modelo para preencher rapidamente.');
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const title = formValue('create-title').trim();
+        const requestType = requestTypeSelect.value;
+        const areaIdValue = formValue('create-area');
+        const description = formValue('create-description').trim();
+        const priorityValue = formValue('create-priority');
+
+        if (!title || !requestType || !areaIdValue || !description) {
+            setCreateStatus('Preencha os campos obrigatorios para abrir o chamado.', true);
+            return;
+        }
+
+        if (!isTicketPriority(priorityValue)) {
+            setCreateStatus('Prioridade invalida.', true);
+            return;
+        }
+
+        const originalLabel = submitButton.textContent ?? 'Abrir Chamado';
+        submitButton.disabled = true;
+        submitButton.textContent = 'Abrindo...';
+        setCreateStatus('Enviando chamado em modo portfolio...');
+
+        try {
+            const response = await createTicket({
+                title,
+                request_type: requestType,
+                area_id: Number(areaIdValue),
+                priority: priorityValue,
+                description,
+                extra_fields: getCreateExtraFieldValues(true),
+            });
+
+            setCreateStatus(`Chamado ${response.ticket.code} aberto com sucesso.`, false, true);
+            showFlash(response.message);
+            form.reset();
+            renderCreateExtraFields('');
+
+            state.ticketsQuery.page = 1;
+            await Promise.all([loadDashboard(), loadTickets(), loadKanban(), refreshNotificationCount()]);
+            if (!byId<HTMLDivElement>('notifications-dropdown').classList.contains('hidden')) {
+                await loadNotifications();
+            }
+        } catch (error) {
+            const message = getErrorMessage(error, 'Nao foi possivel abrir o chamado.');
+            setCreateStatus(message, true);
+            showFlash(message, true);
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = originalLabel;
+        }
+    });
+}
+
+function applyCreateTemplate(templateId: CreateTemplateId): void {
+    const template = createTemplates[templateId];
+    byId<HTMLInputElement>('create-title').value = template.title;
+    byId<HTMLSelectElement>('create-request-type').value = template.request_type;
+    byId<HTMLSelectElement>('create-area').value = String(template.area_id);
+    byId<HTMLSelectElement>('create-priority').value = template.priority;
+    byId<HTMLTextAreaElement>('create-description').value = template.description;
+    renderCreateExtraFields(template.request_type, template.extra_fields);
+}
+
+function renderCreateExtraFields(requestType: string, presetValues: Record<string, string> = {}): void {
+    const container = byId<HTMLDivElement>('create-extra-fields');
+    container.innerHTML = '';
+
+    const fields = createExtraFieldMap[requestType] ?? [];
+    if (!fields.length) {
+        return;
+    }
+
+    fields.forEach((field) => {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+
+        wrapper.className = 'space-y-1';
+
+        label.className = 'text-sm font-medium text-gray-700';
+        label.textContent = field.label;
+        label.htmlFor = `create-extra-${field.key}`;
+
+        input.id = `create-extra-${field.key}`;
+        input.type = 'text';
+        input.placeholder = field.placeholder;
+        input.className = 'form-input mt-1';
+        input.dataset.extraKey = field.key;
+        input.value = presetValues[field.key] ?? '';
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(input);
+        container.appendChild(wrapper);
+    });
+}
+
+function getCreateExtraFieldValues(onlyFilled = false): Record<string, string> {
+    const values: Record<string, string> = {};
+
+    Array.from(document.querySelectorAll<HTMLInputElement>('#create-extra-fields input[data-extra-key]')).forEach((input) => {
+        const key = input.dataset.extraKey ?? '';
+        const value = input.value.trim();
+        if (!key || (onlyFilled && !value)) {
+            return;
+        }
+        values[key] = value;
+    });
+
+    return values;
+}
+
+function setCreateStatus(message: string, isError = false, isSuccess = false): void {
+    const status = byId<HTMLParagraphElement>('create-ticket-status');
+    status.textContent = message;
+    status.classList.remove('text-gray-500', 'text-red-600', 'text-green-700');
+
+    if (isError) {
+        status.classList.add('text-red-600');
+        return;
+    }
+
+    if (isSuccess) {
+        status.classList.add('text-green-700');
+        return;
+    }
+
+    status.classList.add('text-gray-500');
+}
+
+function isTicketPriority(value: string): value is TicketPriority {
+    return value === 'low' || value === 'medium' || value === 'high' || value === 'critical';
 }
 
 function bindTickets(): void {
