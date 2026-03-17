@@ -25,6 +25,10 @@ class TicketPolicy
             return true;
         }
 
+        if ($user->isAtendente() && in_array($ticket->area_id, $user->groupsAreasIds(), true)) {
+            return true;
+        }
+
         return false;
     }
 
